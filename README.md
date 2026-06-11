@@ -31,6 +31,3 @@ Contributing
 - Ensure `instance/` contains runtime DB files and is ignored by git.
 - Run tests (if added) and keep dependencies in `requirements.txt`.
 
-License
-
-Add a license file if you intend to open-source the project.
