@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>Welcome back, {{ username }}! </h1>
+        <p>Here's your expense overview</p>
+    </div>
+
+    <!-- Month/Year Selection -->
+    <div class="filter-section">
+        <div class="date-filters">
+            <select id="month-select" class="filter-select">
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+            </select>
+            
+            <select id="year-select" class="filter-select"></select>
+            
+            <button onclick="refreshDashboard()" class="btn btn-secondary">
+                 Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="card-icon">💰</div>
+            <div class="card-content">
+                <h3>Total Expenses</h3>
+                <p id="total-expenses" class="card-amount">$0</p>
+            </div>
+        </div>
+        
+        <div class="summary-card">
+            <div class="card-icon"></div>
+            <div class="card-content">
+                <h3>Total Transactions</h3>
+                <p id="total-transactions" class="card-amount">0</p>
+            </div>
+        </div>
+        
+        <div class="summary-card">
+            <div class="card-icon"></div>
+            <div class="card-content">
+                <h3>Average Expense</h3>
+                <p id="average-expense" class="card-amount">$0</p>
+            </div>
+        </div>
+        
+        <div class="summary-card">
+            <div class="card-icon"></div>
+            <div class="card-content">
+                <h3>Top Category</h3>
+                <p id="top-category" class="card-amount">-</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-grid">
+        <div class="chart-card">
+            <h3>Expenses by Category</h3>
+            <canvas id="category-chart"></canvas>
+        </div>
+        
+        <div class="chart-card">
+            <h3>Monthly Trend</h3>
+            <canvas id="trend-chart"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Expenses -->
+    <div class="recent-expenses">
+        <div class="section-header">
+            <h3>Recent Expenses</h3>
+            <a href="{{ url_for('expenses_page') }}" class="btn-link">View All →</a>
+        </div>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-expenses-list">
+                    <tr>
+                        <td colspan="4" class="text-center">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Populate year dropdown
+    const yearSelect = document.getElementById('year-select');
+    const currentYear = new Date().getFullYear();
+    for (let year = currentYear - 2; year <= currentYear + 1; year++) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.text = year;
+        if (year === currentYear) option.selected = true;
+        yearSelect.appendChild(option);
+    }
+    
+    // Set current month
+    document.getElementById('month-select').value = new Date().getMonth() + 1;
+    
+    // Load initial data
+    refreshDashboard();
+    
+    function refreshDashboard() {
+        const month = document.getElementById('month-select').value;
+        const year = document.getElementById('year-select').value;
+        
+        loadSummary(month, year);
+        loadRecentExpenses(month, year);
+    }
+    
+    async function loadSummary(month, year) {
+        try {
+            const response = await fetch(`/api/summary/${year}/${month}`);
+            const data = await response.json();
+            
+            // Update summary cards
+            document.getElementById('total-expenses').textContent = formatCurrency(data.total);
+            document.getElementById('total-transactions').textContent = data.expense_count;
+            document.getElementById('average-expense').textContent = 
+                formatCurrency(data.total / (data.expense_count || 1));
+            
+            // Find top category
+            if (data.categories.length > 0) {
+                document.getElementById('top-category').textContent = data.categories[0].category;
+            }
+            
+            // Update category chart
+            updateCategoryChart(data.categories);
+            
+        } catch (error) {
+            console.error('Error loading summary:', error);
+        }
+    }
+    
+    async function loadRecentExpenses(month, year) {
+        try {
+            const response = await fetch(`/api/expenses?month=${month}&year=${year}&limit=5`);
+            const expenses = await response.json();
+            
+            const tbody = document.getElementById('recent-expenses-list');
+            if (expenses.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No expenses found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = expenses.map(expense => `
+                <tr>
+                    <td>${expense.expense_date}</td>
+                    <td><span class="category-badge">${expense.category}</span></td>
+                    <td>${expense.description || '-'}</td>
+                    <td class="amount">${formatCurrency(parseFloat(expense.amount))}</td>
+                </tr>
+            `).join('');
+            
+        } catch (error) {
+            console.error('Error loading recent expenses:', error);
+        }
+    }
+    
+    async function loadTrends() {
+        const year = document.getElementById('year-select').value;
+        try {
+            const response = await fetch(`/api/trends/${year}`);
+            const trends = await response.json();
+            updateTrendChart(trends);
+        } catch (error) {
+            console.error('Error loading trends:', error);
+        }
+    }
+    
+    // Load trends on page load
+    loadTrends();
+    
+    // Refresh trends when year changes
+    document.getElementById('year-select').addEventListener('change', loadTrends);
+</script>
+{% endblock %}

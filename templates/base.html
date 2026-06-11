@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Personal Expense Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='charts.js') }}"></script>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <a href="{{ url_for('dashboard') if session.user_id else url_for('index') }}">
+                    Expense Tracker
+                </a>
+            </div>
+            
+            {% if session.user_id %}
+            <div class="nav-menu">
+                <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('expenses_page') }}" class="nav-link">Expenses</a>
+                <div class="nav-user">
+                    <span>👤 {{ session.username }}</span>
+                    <select id="currency-select" class="currency-select" aria-label="Currency selector"></select>
+                    <a href="{{ url_for('auth.logout') }}" class="nav-link logout">Logout</a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                        <span class="close-btn" onclick="this.parentElement.style.display='none'">&times;</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2024 Personal Expense Tracker. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Expose current currency from session
+        window.APP_CURRENCY_CODE = '{{ session.get("currency", "USD") }}';
+
+        // Load currencies list and populate selector
+        (async function(){
+            try {
+                const resp = await fetch('{{ url_for('static', filename='currencies.json') }}');
+                const map = await resp.json();
+                window.CURRENCY_MAP = map;
+                const sel = document.getElementById('currency-select');
+                if (!sel) return;
+                Object.keys(map).forEach(code => {
+                    const opt = document.createElement('option');
+                    opt.value = code;
+                    opt.text = `${code} — ${map[code].name}`;
+                    if (code === window.APP_CURRENCY_CODE) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+
+                sel.addEventListener('change', async function(){
+                    const code = this.value;
+                    try {
+                        await fetch('/api/currency', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ currency: code })
+                        });
+                        window.APP_CURRENCY_CODE = code;
+                        if (window.onCurrencyChange && typeof window.onCurrencyChange === 'function') {
+                            window.onCurrencyChange(code);
+                        } else {
+                            // Fallback: reload to apply changes
+                            location.reload();
+                        }
+                    } catch (err) {
+                        console.error('Failed to set currency', err);
+                    }
+                });
+            } catch (err) {
+                console.error('Failed to load currencies', err);
+            }
+        })();
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
